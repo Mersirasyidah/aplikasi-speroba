@@ -152,7 +152,7 @@ col1, col2, col3 = st.columns(3)
 
 # Menu 1: Daftar Nama Siswa (Masuk ke col1)
 with col1:
-    st.page_link("1_Daftar_Nama.py", label="📋 Daftar Nama Siswa")
+    st.page_link("pages/1_Daftar_Nama.py", label="📋 Daftar Nama Siswa")
     st.markdown("""
         <div class='menu-card'>
             <div class='icon-circle blue'>📋</div>
@@ -162,7 +162,7 @@ with col1:
 
 # Menu 2: Daftar Nilai Siswa (Masuk ke col2)
 with col2:
-    st.page_link("2_Daftar_Nilai.py", label="📝 Daftar Nilai Siswa")
+    st.page_link("pages/2_Daftar_Nilai.py", label="📝 Daftar Nilai Siswa")
     st.markdown("""
         <div class='menu-card'>
             <div class='icon-circle green'>📝</div>
@@ -172,7 +172,7 @@ with col2:
 
 # Menu 3: Daftar Absensi (Masuk ke col3)
 with col3:
-    st.page_link("3_Daftar_Absensi.py", label="📊 Daftar Absensi")
+    st.page_link("pages/3_Daftar_Absensi.py", label="📊 Daftar Absensi")
     st.markdown("""
         <div class='menu-card'>
             <div class='icon-circle orange'>📊</div>
@@ -195,7 +195,7 @@ col4, col5, col6 = st.columns(3)
 
 # Menu 4: Nilai Hasil Ujian (1) (Masuk ke col4)
 with col4:
-    st.page_link("4_Hasil_Ujian.py", label="🎓 Nilai Hasil Ujian")
+    st.page_link("pages/4_Hasil_Ujian.py", label="🎓 Nilai Hasil Ujian")
     st.markdown("""
         <div class='menu-card'>
             <div class='icon-circle purple'>🎓</div>
@@ -205,7 +205,7 @@ with col4:
 
 # Menu 5: Nilai Hasil Ujian (2) (Masuk ke col5)
 with col5:
-    st.page_link("5_Hasil_TO.py", label="🎓 Nilai Hasil TO TKA/TKAD")
+    st.page_link("pages/5_Hasil_TO.py", label="🎓 Nilai Hasil TO TKA/TKAD")
     st.markdown("""
         <div class='menu-card'>
             <div class='icon-circle purple'>🎓</div>
@@ -215,7 +215,7 @@ with col5:
 
 # Menu 6: Nilai Hasil Ujian (3) (Masuk ke col6)
 with col6:
-    st.page_link("6_Olah_Nilai_TP.py", label="🎓 Nilai Hasil Olah Rapor")
+    st.page_link("pages/6_Olah_Nilai_TP.py", label="🎓 Nilai Hasil Olah Rapor")
     st.markdown("""
         <div class='menu-card'>
             <div class='icon-circle purple'>🎓</div>
