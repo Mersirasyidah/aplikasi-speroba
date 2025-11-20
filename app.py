@@ -79,6 +79,8 @@ st.markdown("""
     .green { background: #43e97b; }
     .orange { background: #f6d365; }
     .purple { background: #a18cd1; }
+    .gold { background: #FFD700; }
+    .red { background: #FF4B4B; }
 
     /* Info Box Styling (Untuk teks menarik) */
     .info-box {
@@ -138,7 +140,7 @@ st.markdown("""
     <div class="info-box">
         <h2>🎓 Sistem Informasi Sekolah: Pusat Data Terpadu</h2>
         <p>
-            Selamat datang di <b>Dashboard Utama</b> SMP Negeri 2 Banguntapan. Sistem ini adalah portal digital Anda untuk mengelola dan memantau seluruh aktivitas akademik siswa secara <b>efektif dan efisien</b>. Gunakan kartu menu di bawah ini untuk mengakses data <b>Daftar Nama, Nilai, Absensi, dan Hasil Ujian</b> dengan cepat.
+            Selamat datang di <b>Dashboard Utama</b> SMP Negeri 2 Banguntapan.<br> Sistem ini adalah portal digital, untuk mengelola dan memantau seluruh aktivitas akademik siswa secara <br><b>efektif dan efisien</b>. Dengan sistem ini, dapat menyamakan dan memudahkan proses pengeditan serta pengelolaan data siswa untuk keperluan informasi akademik. Gunakan kartu menu di bawah ini untuk mengakses data <b>Daftar Nama, Nilai, Absensi, dan Hasil Ujian</b> dengan cepat.
         </p>
     </div>
 """, unsafe_allow_html=True)
@@ -198,27 +200,27 @@ with col4:
     st.page_link("pages/4_Hasil_Ujian.py", label="🎓 Nilai Hasil Ujian")
     st.markdown("""
         <div class='menu-card'>
-            <div class='icon-circle purple'>🎓</div>
+            <div class='icon-circle gold'>🎓</div>
             Nilai Hasil Ujian
         </div>
     """, unsafe_allow_html=True)
 
 # Menu 5: Nilai Hasil Ujian (2) (Masuk ke col5)
 with col5:
-    st.page_link("pages/5_Hasil_TO.py", label="🎓 Nilai Hasil TO TKA/TKAD")
+    st.page_link("pages/5_Hasil_TO.py", label="📚 Nilai Hasil TO TKA/TKAD")
     st.markdown("""
         <div class='menu-card'>
-            <div class='icon-circle purple'>🎓</div>
+            <div class='icon-circle purple'>📚</div>
             Nilai Hasil TO TKA/TKAD
         </div>
     """, unsafe_allow_html=True)
 
 # Menu 6: Nilai Hasil Ujian (3) (Masuk ke col6)
 with col6:
-    st.page_link("pages/6_Olah_Nilai_TP.py", label="🎓 Nilai Hasil Olah Rapor")
+    st.page_link("pages/6_Olah_Nilai_TP.py", label="🏆 Nilai Hasil Olah Rapor")
     st.markdown("""
         <div class='menu-card'>
-            <div class='icon-circle purple'>🎓</div>
+            <div class='icon-circle red'>🏆</div>
             Nilai Hasil Olah Rapor
         </div>
     """, unsafe_allow_html=True)
@@ -240,3 +242,4 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
