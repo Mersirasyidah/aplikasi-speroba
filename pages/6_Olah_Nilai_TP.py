@@ -1,5 +1,5 @@
 import csv
-import os # Diperlukan jika ingin memuat file default di lingkungan lokal
+import os
 import streamlit as st
 import pandas as pd
 from io import BytesIO
@@ -16,7 +16,6 @@ CLASS_OPTIONS = ["7A", "7B", "7C", "7D", "8A", "8B", "9A", "9B"]
 YEAR_OPTIONS = ["2025/2026", "2026/2027", "2027/2028", "2028/2029", "2029/2030"]
 
 # Kolom-kolom nilai yang akan diinput/dihitung
-# LM telah diubah menjadi LM_1, LM_2, LM_3, LM_4, LM_5
 SCORE_COLUMNS = ['TP1', 'TP2', 'TP3', 'TP4', 'TP5', 'LM_1', 'LM_2', 'LM_3', 'LM_4', 'LM_5', 'PTS', 'SAS', 'NR']
 INPUT_SCORE_COLS = [c for c in SCORE_COLUMNS if c != 'NR']
 
@@ -26,7 +25,7 @@ COLUMN_DISPLAY_MAP = {
     'LM_1': 'LM-1', 'LM_2': 'LM-2', 'LM_3': 'LM-3', 'LM_4': 'LM-4', 'LM_5': 'LM-5',
     'PTS': 'PTS', 'SAS': 'SAS/SAT', 'NR': 'NR',
     'Avg_TP': 'Rata-rata TP',
-    'Avg_LM': 'Rata-rata LM', # Kolom rata-rata baru
+    'Avg_LM': 'Rata-rata LM',
     'Avg_PSA': 'Rata-rata PSA',
     'Deskripsi_NR': 'Deskripsi Rapor'
 }
@@ -57,7 +56,6 @@ def load_base_student_data():
     """
     file_path = "daftar_siswa.csv"
     try:
-        # PENTING: Dalam lingkungan Streamlit Canvas, file ini hanya akan terdeteksi
         if os.path.exists(file_path):
             df = pd.read_csv(file_path)
 
@@ -84,16 +82,13 @@ def load_base_student_data():
                 # Hapus kolom 'Nilai Rata-rata' dari CSV awal jika ada
                 df = df.drop(columns=['Nilai Rata-rata'], errors='ignore')
 
-                #st.sidebar.success(f"Berhasil memuat **{len(df)}** data siswa dari file default (jika tersedia).")
                 return df
             else:
-                 st.sidebar.warning(f"CSV default tidak memiliki kolom wajib (NIS, Nama, Kelas). Menggunakan data dummy.")
                  return load_dummy_data()
         else:
             return load_dummy_data()
 
     except Exception as e:
-        st.sidebar.error(f"Terjadi kesalahan saat memuat file default: {e}. Menggunakan data dummy.")
         return load_dummy_data()
 
 
@@ -152,23 +147,22 @@ def calculate_nr(df_input: pd.DataFrame) -> pd.DataFrame:
 def calculate_tk_status(df_input: pd.DataFrame) -> pd.DataFrame:
     """
     Menambahkan kolom Tingkat Ketercapaian (TK) untuk setiap TP
-    Berdasarkan threshold 80. Nilai >= 80 = 'T' (Tuntas), Nilai < 80 = 'R' (Remidi).
+    Berbasis threshold 80. Nilai >= 80 = 'T', Nilai < 80 = 'R'.
     Logika Khusus: Jika semua TP Tuntas (Nilai >= 80), ubah TP dengan nilai terkecil menjadi 'R'.
-
-    MODIFIKASI: Jika nilai TP adalah 0, status TK diatur menjadi "" (kosong).
+    Jika nilai TP adalah 0, status TK diatur menjadi "" (kosong).
     """
     df = df_input.copy()
     tp_cols = [c for c in df.columns if c.startswith('TP') and len(c) == 3]
-    TK_THRESHOLD = 80
+    TK_THRESHOLD = KKM # Menggunakan KKM dari konfigurasi
     tk_cols = [f'TK_{col}' for col in tp_cols]
 
-    # 1. Tentukan status T/R awal (DITAMBAH LOGIKA UNTUK NILAI 0)
+    # 1. Tentukan status T/R awal
     for tp_col in tp_cols:
         tk_col = f'TK_{tp_col}'
 
         def determine_tk(score):
             if score == 0:
-                return "" # KETERANGAN KOSONG JIKA NILAI TP ADALAH 0
+                return ""
             elif score >= TK_THRESHOLD:
                 return "T"
             else:
@@ -176,12 +170,11 @@ def calculate_tk_status(df_input: pd.DataFrame) -> pd.DataFrame:
 
         df[tk_col] = df[tp_col].apply(determine_tk)
 
-    # 2. Terapkan Logika Khusus (Hanya pada baris yang memiliki setidaknya satu nilai TP > 0)
+    # 2. Terapkan Logika Khusus (Demotion Rule)
     def apply_demotion_rule(row):
         # Filter TK hanya yang memiliki nilai (bukan "")
         active_tk_cols = [tk_col for tk_col in tk_cols if row.get(tk_col) != ""]
 
-        # Jika tidak ada TP yang diisi, langsung kembali
         if not active_tk_cols:
             return row
 
@@ -205,10 +198,9 @@ def calculate_tk_status(df_input: pd.DataFrame) -> pd.DataFrame:
         return row
 
     # Terapkan logika hanya pada baris di mana terdapat input TP (total TP > 0)
-    # Ini memastikan bahwa baris yang sepenuhnya kosong tidak diproses oleh logika demosi
     df['total_tp'] = df[tp_cols].sum(axis=1)
     df[tk_cols] = df.apply(lambda row: apply_demotion_rule(row) if row['total_tp'] > 0 else row, axis=1)[tk_cols]
-    df = df.drop(columns=['total_tp']) # Hapus kolom bantu
+    df = df.drop(columns=['total_tp'])
 
     return df
 
@@ -242,94 +234,239 @@ def generate_nr_description(df_input: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # =========================================================
-# FUNGSI EKSPOR EXCEL
+# FUNGSI EKSPOR EXCEL DENGAN BORDER
 # =========================================================
 
 def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
     """
-    Membuat buffer Excel untuk Form Nilai Siswa (Laporan Lengkap),
-    termasuk kolom Deskripsi_NR, dan 5 kolom LM.
+    Membuat buffer Excel untuk Form Nilai Siswa (Laporan Lengkap).
+    - Header informasi: Keterangan di Kolom A (0), Nilai Isian di Kolom C (2) (dengan ':').
+    - Kolom B (1) dikosongkan sebagai spacer visual.
+    - Tabel data siswa: Dimulai dari Kolom A (NIS) pada baris ke-9.
     """
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
 
-        # Kolom yang diekspor (termasuk 5 LM dan rata-rata LM)
+        # Inisialisasi sheet.
+        df_temp = pd.DataFrame()
+        df_temp.to_excel(writer, sheet_name='Form Nilai', startrow=0, startcol=0, index=False)
+        worksheet = writer.sheets['Form Nilai']
+
+        # Definisi Format (Diasumsikan COLUMN_DISPLAY_MAP, KKM, dll. sudah didefinisikan)
+        border_format = workbook.add_format({
+            'border': 1, 'align': 'center', 'valign': 'vcenter'
+        })
+        header_format = workbook.add_format({
+            'border': 1, 'align': 'center', 'valign': 'vcenter',
+            'bold': True, 'fg_color': '#D9E1F2', 'text_wrap': True
+        })
+        text_format = workbook.add_format({
+            'border': 1, 'align': 'left', 'valign': 'vcenter'
+        })
+        nr_format = workbook.add_format({
+            'border': 1, 'align': 'center', 'valign': 'vcenter', 'bold': True
+        })
+        header_info_format = workbook.add_format({
+            'align': 'left', 'valign': 'vcenter'
+        })
+
+        # ------------------------------------
+
+        # Kolom yang diekspor dan pembersihan data
         LM_COLS_EXPORT = ['LM_1', 'LM_2', 'LM_3', 'LM_4', 'LM_5']
         EXPORT_SCORE_COLS = ['TP1', 'TP2', 'TP3', 'TP4', 'TP5'] + LM_COLS_EXPORT + ['PTS', 'SAS', 'Avg_TP', 'Avg_LM', 'Avg_PSA', 'NR', 'Deskripsi_NR']
 
         df_export = df[['NIS', 'Nama', 'Kelas'] + [c for c in EXPORT_SCORE_COLS if c in df.columns]]
-
-        # Ganti nama kolom untuk header Excel
         df_export.columns = ['NIS', 'NAMA SISWA', 'KELAS'] + [COLUMN_DISPLAY_MAP.get(c, c) for c in df_export.columns if c not in ['NIS', 'Nama', 'Kelas']]
 
-        # Tambahkan header informasi
-        header_df = pd.DataFrame({
+        NUMERIC_COLS_EXPORT = [c for c in df_export.columns if c not in ['NIS', 'NAMA SISWA', 'KELAS', 'Deskripsi Rapor']]
+        df_export[NUMERIC_COLS_EXPORT] = df_export[NUMERIC_COLS_EXPORT].fillna(0)
+
+        # ====================================================================
+        # 2. MENULIS HEADER INFORMASI (Keterangan di Kolom A, Nilai Isian di Kolom C)
+        # ====================================================================
+        header_data = {
             'Keterangan': [
-                'Mata Pelajaran', 'Kelas', 'Semester', 'Tahun Pelajaran', 'KKM',
-                'Guru Mata Pelajaran', 'NIP Guru'
+                'Mata Pelajaran', 'Kelas', 'Semester', 'Tahun Pelajaran', 'KKTP',
+                'Guru Mata Pelelajaran', 'NIP Guru'
             ],
             'Nilai': [
                 mapel, kelas, semester, tp, KKM, guru, nip
             ]
-        })
-        header_df.to_excel(writer, startrow=0, startcol=0, sheet_name='Form Nilai', index=False, header=False)
+        }
+        header_df = pd.DataFrame(header_data)
 
-        # Tulis data nilai siswa di bawah header
-        df_export.to_excel(writer, startrow=9, startcol=0, sheet_name='Form Nilai', index=False)
+        START_ROW_INFO = 0
+        for r_idx, row in header_df.iterrows():
+            # Kolom 0 (A): Keterangan
+            worksheet.write(r_idx + START_ROW_INFO, 0, row['Keterangan'], header_info_format)
+
+            # Kolom 2 (C): Nilai Isian dengan tanda :
+            # 🔴 KOREKSI DITERAPKAN: Pindah Nilai Isian ke Kolom C (indeks 2)
+            worksheet.write(r_idx + START_ROW_INFO, 2, ': ' + str(row['Nilai']), header_info_format)
+
+        # Set lebar kolom A dan C untuk header informasi
+        worksheet.set_column(0, 0, 20) # Kolom A (Keterangan)
+        worksheet.set_column(2, 2, 30) # Kolom C (Nilai Isian)
+        # Kolom B (indeks 1) dibiarkan sebagai spacer, lebar default
+
+        # ====================================================================
+        # 3. MENULIS DATA NILAI SISWA (Dimulai dari Kolom A / Index 0)
+        # ====================================================================
+        START_ROW_DATA = 9
+        # Tabel data siswa dimulai dari Kolom A (indeks 0)
+        COL_OFFSET = 0
+
+        # Tulis Header Tabel Data Nilai
+        for col_num, value in enumerate(df_export.columns.values):
+            worksheet.write(START_ROW_DATA, col_num + COL_OFFSET, value, header_format)
+
+        # Tulis Data Siswa dengan Format Border
+        num_rows = len(df_export)
+        num_cols = len(df_export.columns)
+
+        for row_num in range(START_ROW_DATA + 1, START_ROW_DATA + num_rows + 1):
+            for col_num in range(num_cols):
+                cell_value = df_export.iloc[row_num - (START_ROW_DATA + 1), col_num]
+                column_name = df_export.columns[col_num]
+
+                # Tentukan format
+                current_format = border_format
+                if column_name in ['NIS', 'NAMA SISWA', 'KELAS', 'Deskripsi Rapor']:
+                    if isinstance(cell_value, (int, float)):
+                        cell_value = str(cell_value)
+                    current_format = text_format
+                elif column_name == 'NR':
+                    current_format = nr_format
+
+                # Tulis data dengan offset
+                worksheet.write(row_num, col_num + COL_OFFSET, cell_value, current_format)
+
+        # ====================================================================
+        # 4. SET LEBAR KOLOM UNTUK DATA SISWA
+        # ====================================================================
+
+        # NIS: Kolom A (indeks 0) -> Lebar 5
+        worksheet.set_column(0 + COL_OFFSET, 0 + COL_OFFSET, 5)
+        # Nama Siswa: Kolom B (indeks 1) -> Lebar 25
+        worksheet.set_column(1 + COL_OFFSET, 1 + COL_OFFSET, 25)
+        # Kelas: Kolom C (indeks 2) -> Lebar 5
+        worksheet.set_column(2 + COL_OFFSET, 2 + COL_OFFSET, 7)
+
+        # Kolom Nilai Numerik (D dan seterusnya)
+        worksheet.set_column(3 + COL_OFFSET, num_cols - 2 + COL_OFFSET, 8)
+
+        # Deskripsi Rapor (Kolom terakhir)
+        worksheet.set_column(num_cols - 1 + COL_OFFSET, num_cols - 1 + COL_OFFSET, 60)
 
     return output.getvalue()
 
 def generate_excel_report_tk(df, mapel, kelas, tp):
     """
     Membuat buffer Excel untuk Laporan Tingkat Ketercapaian (TK)
-    dengan header pendek (1, 2, 3, 4, 5).
+    dengan header pendek (1, 2, 3, 4, 5) dan border pada tabel data.
     """
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+
+        # Inisialisasi sheet
+        df_temp = pd.DataFrame()
+        df_temp.to_excel(writer, sheet_name='Laporan TK', startrow=0, startcol=0, index=False)
+        worksheet = writer.sheets['Laporan TK']
+
+        # Definisi Format dengan Border
+        border_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter'
+        })
+        header_format = workbook.add_format({
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'bold': True,
+            'fg_color': '#D9E1F2'
+        })
+        text_format = workbook.add_format({
+            'border': 1,
+            'align': 'left',
+            'valign': 'vcenter'
+        })
+        # ------------------------------------
 
         # Tampilkan kolom NR dan semua kolom TK
         tk_cols = [c for c in df.columns if c.startswith('TK_TP') and len(c) == 6]
         df_export = df[['NIS', 'Nama', 'Kelas', 'NR'] + tk_cols]
 
         # MODIFIKASI: Gunakan NAMA KOLOM PENDEK (1, 2, 3, 4, 5)
-        tk_headers_short = [str(i) for i in range(1, len(tk_cols) + 1)]
+        tk_headers_short = [f'KTP-{i}' for i in range(1, len(tk_cols) + 1)]
         df_export.columns = ['NIS', 'NAMA SISWA', 'KELAS', 'NR'] + tk_headers_short
 
-        # 1. SIAPKAN DATA HEADER
-        # KKM diambil dari variabel global
-        KKTP = KKM
+        # --- PERBAIKAN ERROR NAN/INF ---
+        df_export['NR'] = df_export['NR'].fillna(0)
+        # -------------------------------
 
-        # DataFrame awal dengan Keterangan di kolom 0 (A)
+        # 1. SIAPKAN DATA HEADER
+        KKTP = KKM
         keterangan_df = pd.DataFrame({
             'Keterangan': [
-                'Mata Pelajaran', 'Kelas', 'Tahun Pelajaran', 'Batas Ketuntasan (KKM)'
+                'Mata Pelajaran', 'Kelas', 'Tahun Pelajaran', 'Batas Ketuntasan (KKTP)'
             ]
         })
 
-        # DataFrame nilai isian di kolom 3 (D) - Tambahkan 2 kolom kosong di antara Keterangan dan Nilai
+        # --- PERUBAHAN: Tambahkan Tanda Titik Dua (:) ---
+        nilai_isian_dengan_titik_dua = [
+            ': ' + str(mapel),
+            ': ' + str(kelas),
+            ': ' + str(tp),
+            ': ' + str(KKTP)
+        ]
+
         nilai_isian_df = pd.DataFrame({
-            'Nilai_Isian': [
-                mapel, kelas, tp, KKTP
-            ]
+            'Nilai_Isian': nilai_isian_dengan_titik_dua
         })
+        # --- AKHIR PERUBAHAN ---
 
-        # Gabungkan data untuk header dengan sel kosong (NaN) di kolom 1 dan 2
-        # Data Keterangan di kolom 0
-        # Data Nilai Isian di kolom 3
         combined_header_df = pd.concat([
             keterangan_df,
-            pd.DataFrame(np.nan, index=keterangan_df.index, columns=['Kolom Kosong 1', 'Kolom Kosong 2']),
+            pd.DataFrame(np.nan, index=keterangan_df.index, columns=['Kolom Kosong 1']),
             nilai_isian_df
         ], axis=1)
 
         # 2. TULIS DATA HEADER KE EXCEL
-        # Mulai menulis dari baris 0 (startrow=0) dan kolom 0 (startcol=0)
-        # Hapus header bawaan Pandas (header=False)
         combined_header_df.to_excel(writer, startrow=0, startcol=0, sheet_name='Laporan TK', index=False, header=False)
 
 
-        # Tulis data TK siswa di bawah header (startrow tetap 6, startcol tetap 0)
-        df_export.to_excel(writer, startrow=6, startcol=0, sheet_name='Laporan TK', index=False)
+        # Tulis data TK siswa di bawah header
+        START_ROW_DATA = 6
+
+        # Tulis ulang Header dengan Format Border
+        for col_num, value in enumerate(df_export.columns.values):
+            worksheet.write(START_ROW_DATA, col_num, value, header_format)
+
+        # Terapkan Format Border pada Data Siswa
+        num_rows = len(df_export)
+        num_cols = len(df_export.columns)
+
+        for row_num in range(START_ROW_DATA + 1, START_ROW_DATA + num_rows + 1):
+            for col_num in range(num_cols):
+                cell_value = df_export.iloc[row_num - (START_ROW_DATA + 1), col_num]
+
+                column_name = df_export.columns[col_num]
+
+                # Format khusus untuk kolom teks (NIS, Nama, Kelas)
+                if column_name in ['NIS', 'NAMA SISWA', 'KELAS']:
+                    if isinstance(cell_value, (int, float)):
+                        cell_value = str(cell_value)
+                    worksheet.write(row_num, col_num, cell_value, text_format)
+                else:
+                    # NR (numerik) dan status TK (teks/angka 0)
+                    worksheet.write(row_num, col_num, cell_value, border_format)
+
+        # Set lebar kolom
+        worksheet.set_column(1, 1, 25) # Nama Siswa
 
     return output.getvalue()
 
@@ -340,9 +477,20 @@ def generate_excel_report_tk(df, mapel, kelas, tp):
 
 st.set_page_config(layout="wide", page_title="Editor Nilai Kurikulum Merdeka (LM x 5)")
 
-st.title("Olah Nilai Rapor / Griya Rapor")
-#st.caption("Aplikasi sederhana untuk input nilai sumatif, perhitungan NR, Status TK, dan **Deskripsi Rapor Otomatis**.")#
+# Injeksi CSS untuk gaya
+st.markdown(
+    """
+    <style>
+    /* Hilangkan index di Streamlit Data Editor */
+    div[data-testid="stDataFrame"] .st-bd {
+        margin-left: -5px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
+st.title("Olah Nilai Rapor / Griya Rapor")
 st.write("---")
 
 # --- Bagian Sidebar untuk Unggah Data Siswa ---
@@ -367,7 +515,6 @@ if uploaded_file is not None:
             df_all_students['NIS'] = df_all_students['NIS'].astype(str).str.strip()
             df_all_students['Nama'] = df_all_students['Nama'].astype(str).str.strip()
             df_all_students['Kelas'] = df_all_students['Kelas'].astype(str).str.strip().str.upper()
-            #st.sidebar.success(f"Berhasil memuat **{len(df_all_students)}** data siswa dari CSV yang diunggah.")
         else:
             st.sidebar.error("CSV yang diunggah harus memiliki kolom 'NIS', 'Nama', dan 'Kelas'. Menggunakan data dasar.")
             df_all_students = df_all_students_base
@@ -395,7 +542,6 @@ with col2:
     default_class_index = 0
     if len(available_classes) > 0:
         try:
-            # Cari kelas yang paling umum di data
             most_common_class = df_all_students['Kelas'].mode().iloc[0]
             default_class_index = available_classes.index(most_common_class)
         except:
@@ -460,7 +606,6 @@ if df_base is not None and len(df_base) > 0:
     column_config = {
         'NIS': st.column_config.Column("NIS", disabled=True),
         'Nama': st.column_config.Column("Nama", disabled=True),
-        # 'Kelas': st.column_config.Column("Kelas", disabled=True), # Kelas disembunyikan dari editor
         # Konfigurasi kolom nilai input (TP, 5xLM, PTS, SAS)
         **{
             col: st.column_config.NumberColumn(
@@ -473,11 +618,9 @@ if df_base is not None and len(df_base) > 0:
         'NR': st.column_config.NumberColumn("NR (Otomatis)", disabled=True, format="%d", help=f"Nilai Rapor dihitung. Batas Ketuntasan (TK): {KKM}"),
     }
 
-    # Data yang ditampilkan di editor (dihilangkan kolom hitungan perantara dan **Kelas**)
-    # >>> MODIFIKASI: Tambahkan 'Kelas' ke columns_to_drop_editor
+    # Data yang ditampilkan di editor (dihilangkan kolom hitungan perantara dan Kelas)
     columns_to_drop_editor = ['Avg_TP', 'Avg_LM', 'Avg_PSA', 'Deskripsi_NR', 'Kelas'] + [c for c in st.session_state[state_key].columns if c.startswith('TK_') ]
     df_editor_input = st.session_state[state_key].drop(columns=columns_to_drop_editor, errors='ignore')
-    # <<< END MODIFIKASI
 
     # Tampilkan editor dan simpan hasilnya
     edited_df = st.data_editor(
@@ -493,15 +636,14 @@ if df_base is not None and len(df_base) > 0:
     if not edited_df.equals(df_editor_input):
         # Convert edited columns back to numeric
         for col in INPUT_COLS_FOR_EDITOR:
-            # Convert to numeric, handle potential errors (non-numeric input from editor), fill NaN with 0, and convert to integer
             edited_df[col] = pd.to_numeric(edited_df[col], errors='coerce').fillna(0).astype(int)
 
         # Ambil kembali kolom yang tersembunyi ('Kelas', 'NIS', 'Nama')
         for col in ['NIS', 'Nama']:
             if col in df_base.columns:
-                edited_df[col] = df_base[col] # Pastikan kolom wajib tetap ada
+                edited_df[col] = df_base[col]
         if 'Kelas' in df_base.columns and 'Kelas' not in edited_df.columns:
-            edited_df.insert(2, 'Kelas', df_base['Kelas']) # Masukkan kembali kolom Kelas untuk perhitungan/ekspor
+            edited_df.insert(2, 'Kelas', df_base['Kelas'])
 
         # Hitung ulang NR, TK, dan Deskripsi
         df_nr_calculated = calculate_nr(edited_df)
@@ -516,14 +658,12 @@ if df_base is not None and len(df_base) > 0:
 
     st.subheader("Hasil Nilai Akhir, dan Kriteria Tujuan Pembelajaran")
 
-    # >>> MODIFIKASI: Hapus Avg_TP, Avg_LM, Avg_PSA, dan Kelas dari tampilan
     # Kolom untuk ditampilkan: NIS, Nama, Nilai Rata-rata, NR, Status TK, Deskripsi
     tk_cols_display = [c for c in df_final_calculated.columns if c.startswith('TK_TP')]
     LM_COLS_DISPLAY = [f'LM_{i}' for i in range(1, 6)]
-    # Daftar kolom yang ingin disimpan, kolom rata-rata disembunyikan
     SCORE_COLS_DISPLAY_KEPT = ['TP1', 'TP2', 'TP3', 'TP4', 'TP5'] + LM_COLS_DISPLAY + ['PTS', 'SAS', 'NR', 'Deskripsi_NR']
 
-    # Hapus 'Kelas' dari daftar yang akan ditampilkan
+    # Daftar kolom yang akan ditampilkan
     display_cols = ['NIS', 'Nama'] + [c for c in SCORE_COLS_DISPLAY_KEPT if c in df_final_calculated.columns] + tk_cols_display
 
     # Rename kolom TK
@@ -531,7 +671,6 @@ if df_base is not None and len(df_base) > 0:
 
     # Tampilkan data dengan kolom yang sudah difilter
     df_display = df_final_calculated[display_cols].rename(columns={**display_map_tk})
-    # <<< END MODIFIKASI
 
     st.dataframe(df_display,
                  hide_index=True, use_container_width=True)
@@ -564,7 +703,7 @@ if df_siswa_to_export is not None and len(df_siswa_to_export) > 0:
             nip_guru_input
         )
         st.download_button(
-            label="⬇️ Ekspor / Cetak Nilai Rapor dengan Deskripsi Rapor)",
+            label="⬇️ Ekspor / Cetak Nilai Rapor dengan Deskripsi Rapor",
             file_name=f"Nilai_Akhir_{kelas_input}_{mapel_terpilih}_{semester_input}.xlsx",
             data=excel_buffer_nilai,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -585,16 +724,5 @@ if df_siswa_to_export is not None and len(df_siswa_to_export) > 0:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_tk_report"
         )
-        #st.info("Laporan Status TK per TP dengan header pendek (1, 2, 3, 4, 5) siap diekspor!")#
-    #st.success("Form Nilai Siswa, Laporan TK, dan Deskripsi Rapor siap diekspor!")#
 
 st.write("---")
-#st.subheader("💡 Cara Kerja Editor:")
-#st.markdown(f"""
-#1.  **Input Data**: Editor menampilkan data siswa yang sudah difilter berdasarkan 'Kelas' yang dipilih.
-#2.  **Paste Nilai**: Anda dapat menyalin (*copy*) rentang nilai dari Excel atau spreadsheet lain dan menempelkannya (*paste*) langsung di kolom **TP-1** hingga **SAS/SAT** di editor.
-#3.  **Perhitungan Otomatis**: Kolom **NR (Nilai Rapor)** dan **Deskripsi Rapor** dihitung ulang secara otomatis.
-#4.  **Rata-rata LM**: Nilai `Rata-rata LM` dihitung dari **LM-1** hingga **LM-5**.
-#5.  **Perhitungan NR**: `NR` dihitung dari rata-rata bobot **Avg\_TP (1)**, **Avg\_LM (1)**, dan **Avg\_PSA (2)**.
-#6.  **Tingkat Ketercapaian (TK)**: Statusnya adalah **'T'** (Tuntas) jika nilai $\ge {KKM}$ dan **'R'** (Remidi) jika nilai $< {KKM}$. **(TERMASUK LOGIKA PENGUBAHAN JIKA SEMUA TP TUNTAS)**. Status ini menjadi dasar pembuatan Deskripsi Rapor.
-#""")
