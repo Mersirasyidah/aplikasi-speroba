@@ -221,8 +221,8 @@ def generate_excel_daftar_siswa(dataframe, kelas, semester, tahun_pelajaran, nam
     return buffer
 
 # ===================== APLIKASI STREAMLIT UTAMA =====================
-st.set_page_config(layout="wide", page_title="Aplikasi Manajemen Data Siswa & Daftar Hadir")
-st.title("Aplikasi Manajemen Data Siswa & Daftar Hadir")
+st.set_page_config(layout="wide", page_title="Aplikasi Manajemen Data Siswa")
+st.title("Aplikasi Manajemen Data Siswa")
 
 default_csv_path = "daftar_siswa.csv"
 df = None
@@ -237,7 +237,7 @@ if st.session_state.df_loaded is None:
         try:
             df = pd.read_csv(default_csv_path)
             st.session_state.df_loaded = df
-            st.success(f"File '{default_csv_path}' berhasil dimuat secara otomatis.")
+            #st.success(f"File '{default_csv_path}' berhasil dimuat secara otomatis.")
         except Exception as e:
             st.error(f"Gagal memuat '{default_csv_path}': {e}. Coba unggah file manual.")
 
