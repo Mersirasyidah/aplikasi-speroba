@@ -11,7 +11,7 @@ import numpy as np
 # =========================================================
 
 # Variabel konfigurasi
-COMMON_SUBJECTS = ["Matematika", "Bahasa Inggris", "IPA", "IPS", "Seni Budaya", "Informatika"]
+COMMON_SUBJECTS = ["Matematika", "Bahasa Inggris", "IPA", "Bahasa Indonesia", "IPS", "Pendidikan Agama Islam", "Pendidikan Agama Katholik", "Pendidikan Agama Kristen", "Pendidikan Agama Hindu", "PJOK",  "Bahasa Jawa", "Prakarya", "Pendidikan Pancasila", "Seni Budaya", "Informatika"]
 CLASS_OPTIONS = ["7A", "7B", "7C", "7D", "8A", "8B", "9A", "9B"]
 YEAR_OPTIONS = ["2025/2026", "2026/2027", "2027/2028", "2028/2029", "2029/2030"]
 
