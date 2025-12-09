@@ -11,7 +11,7 @@ import numpy as np
 # =========================================================
 
 # Variabel konfigurasi
-COMMON_SUBJECTS = ["Matematika", "Bahasa Inggris", "IPA", "Bahasa Indonesia", "IPS", "Pendidikan Agama Islam", "Pendidikan Agama Katholik", "Pendidikan Agama Kristen", "Pendidikan Agama Hindu", "PJOK",  "Bahasa Jawa", "Prakarya", "Pendidikan Pancasila", "Seni Budaya", "Informatika"]
+COMMON_SUBJECTS = ["Matematika", "Bahasa Inggris", "IPA", "IPS", "Bahasa Indonesia","Seni Budaya", "P.Pancasila", "Pendidikan Agama", "Bahasa Jawa", "PJOK", "Informatika", "Prakarya"]
 CLASS_OPTIONS = ["7A", "7B", "7C", "7D", "8A", "8B", "9A", "9B"]
 YEAR_OPTIONS = ["2025/2026", "2026/2027", "2027/2028", "2028/2029", "2029/2030"]
 
@@ -234,15 +234,28 @@ def generate_nr_description(df_input: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # =========================================================
-# FUNGSI EKSPOR EXCEL DENGAN BORDER
+# HELPERS UNTUK EXCEL
+# =========================================================
+
+def col_idx_to_excel(col_idx):
+    """Convert 0-based column index to Excel column letters (0->A)."""
+    # convert to 1-based
+    col_idx += 1
+    letters = ""
+    while col_idx:
+        col_idx, remainder = divmod(col_idx - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+# =========================================================
+# FUNGSI EKSPOR EXCEL DENGAN BORDER + RUMUS & WARNA
 # =========================================================
 
 def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
     """
     Membuat buffer Excel untuk Form Nilai Siswa (Laporan Lengkap).
-    - Header informasi: Keterangan di Kolom A (0), Nilai Isian di Kolom C (2) (dengan ':').
-    - Kolom B (1) dikosongkan sebagai spacer visual.
-    - Tabel data siswa: Dimulai dari Kolom A (NIS) pada baris ke-9.
+    Menulis RUMUS di kolom Avg_TP, Avg_LM, Avg_PSA, NR.
+    Memberi warna kolom rumus agar tampak "jangan diubah".
     """
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -271,6 +284,15 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
             'align': 'left', 'valign': 'vcenter'
         })
 
+        # Format untuk kolom rumus (warna kuning lembut) dan locked
+        formula_protected_format = workbook.add_format({
+            'bg_color': '#FFF2CC',
+            'border': 1,
+            'align': 'center',
+            'valign': 'vcenter',
+            'locked': True
+        })
+
         # ------------------------------------
 
         # Kolom yang diekspor dan pembersihan data
@@ -278,8 +300,10 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
         EXPORT_SCORE_COLS = ['TP1', 'TP2', 'TP3', 'TP4', 'TP5'] + LM_COLS_EXPORT + ['PTS', 'SAS', 'Avg_TP', 'Avg_LM', 'Avg_PSA', 'NR', 'Deskripsi_NR']
 
         df_export = df[['NIS', 'Nama', 'Kelas'] + [c for c in EXPORT_SCORE_COLS if c in df.columns]]
+        # Map display names
         df_export.columns = ['NIS', 'NAMA SISWA', 'KELAS'] + [COLUMN_DISPLAY_MAP.get(c, c) for c in df_export.columns if c not in ['NIS', 'Nama', 'Kelas']]
 
+        # Pastikan numeric diisi 0 untuk sementara (agar tidak error saat menulis)
         NUMERIC_COLS_EXPORT = [c for c in df_export.columns if c not in ['NIS', 'NAMA SISWA', 'KELAS', 'Deskripsi Rapor']]
         df_export[NUMERIC_COLS_EXPORT] = df_export[NUMERIC_COLS_EXPORT].fillna(0)
 
@@ -303,7 +327,6 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
             worksheet.write(r_idx + START_ROW_INFO, 0, row['Keterangan'], header_info_format)
 
             # Kolom 2 (C): Nilai Isian dengan tanda :
-            # 🔴 KOREKSI DITERAPKAN: Pindah Nilai Isian ke Kolom C (indeks 2)
             worksheet.write(r_idx + START_ROW_INFO, 2, ': ' + str(row['Nilai']), header_info_format)
 
         # Set lebar kolom A dan C untuk header informasi
@@ -315,23 +338,48 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
         # 3. MENULIS DATA NILAI SISWA (Dimulai dari Kolom A / Index 0)
         # ====================================================================
         START_ROW_DATA = 9
-        # Tabel data siswa dimulai dari Kolom A (indeks 0)
         COL_OFFSET = 0
 
         # Tulis Header Tabel Data Nilai
         for col_num, value in enumerate(df_export.columns.values):
             worksheet.write(START_ROW_DATA, col_num + COL_OFFSET, value, header_format)
 
-        # Tulis Data Siswa dengan Format Border
+        # Tulis Data Siswa dengan Format Border + Rumus di kolom Avg & NR
         num_rows = len(df_export)
         num_cols = len(df_export.columns)
 
-        for row_num in range(START_ROW_DATA + 1, START_ROW_DATA + num_rows + 1):
-            for col_num in range(num_cols):
-                cell_value = df_export.iloc[row_num - (START_ROW_DATA + 1), col_num]
-                column_name = df_export.columns[col_num]
+        # Pre-calc column indexes by title (dynamic)
+        cols = list(df_export.columns)
+        def idx_of(title):
+            return cols.index(title) if title in cols else None
 
-                # Tentukan format
+        idx_avg_tp = idx_of('Rata-rata TP')
+        idx_avg_lm = idx_of('Rata-rata LM')
+        idx_avg_psa = idx_of('Rata-rata PSA')
+        idx_nr = idx_of('NR')
+        # Indices for TP and LM and PTS/SAS (based on display names)
+        tp_display_titles = ['TP-1','TP-2','TP-3','TP-4','TP-5']
+        lm_display_titles = ['LM-1','LM-2','LM-3','LM-4','LM-5']
+
+        # find TP & LM indices (if present)
+        tp_indices = [cols.index(t) for t in tp_display_titles if t in cols]
+        lm_indices = [cols.index(t) for t in lm_display_titles if t in cols]
+        idx_pts = cols.index('PTS') if 'PTS' in cols else None
+        idx_sas = cols.index('SAS/SAT') if 'SAS/SAT' in cols else None
+
+        for r_i in range(num_rows):
+            row_num = START_ROW_DATA + 1 + r_i
+            excel_row = row_num + 1  # 1-based Excel row number
+
+            # Tulis semua kolom biasa (kecuali Avg_* dan NR yang akan ditulis rumus)
+            for col_num in range(num_cols):
+                column_name = df_export.columns[col_num]
+                cell_value = df_export.iloc[r_i, col_num]
+
+                # Jika kolom adalah Avg_TP/Avg_LM/Avg_PSA/NR, skip (nanti rumus)
+                if column_name in ['Rata-rata TP', 'Rata-rata LM', 'Rata-rata PSA', 'NR']:
+                    continue
+
                 current_format = border_format
                 if column_name in ['NIS', 'NAMA SISWA', 'KELAS', 'Deskripsi Rapor']:
                     if isinstance(cell_value, (int, float)):
@@ -340,8 +388,38 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
                 elif column_name == 'NR':
                     current_format = nr_format
 
-                # Tulis data dengan offset
                 worksheet.write(row_num, col_num + COL_OFFSET, cell_value, current_format)
+
+            # TULIS RUMUS AVERAGEIF untuk Avg_TP, Avg_LM, Avg_PSA jika kolom ditemukan
+            if idx_avg_tp is not None and tp_indices:
+                first_tp_col = col_idx_to_excel(tp_indices[0] + COL_OFFSET)
+                last_tp_col = col_idx_to_excel(tp_indices[-1] + COL_OFFSET)
+                formula_avg_tp = f"=AVERAGEIF({first_tp_col}{excel_row}:{last_tp_col}{excel_row},\">0\")"
+                worksheet.write_formula(row_num, idx_avg_tp + COL_OFFSET, formula_avg_tp, formula_protected_format)
+
+            if idx_avg_lm is not None and lm_indices:
+                first_lm_col = col_idx_to_excel(lm_indices[0] + COL_OFFSET)
+                last_lm_col = col_idx_to_excel(lm_indices[-1] + COL_OFFSET)
+                formula_avg_lm = f"=AVERAGEIF({first_lm_col}{excel_row}:{last_lm_col}{excel_row},\">0\")"
+                worksheet.write_formula(row_num, idx_avg_lm + COL_OFFSET, formula_avg_lm, formula_protected_format)
+
+            if idx_avg_psa is not None and idx_pts is not None and idx_sas is not None:
+                col_pts = col_idx_to_excel(idx_pts + COL_OFFSET)
+                col_sas = col_idx_to_excel(idx_sas + COL_OFFSET)
+                formula_avg_psa = f"=AVERAGEIF({col_pts}{excel_row}:{col_sas}{excel_row},\">0\")"
+                worksheet.write_formula(row_num, idx_avg_psa + COL_OFFSET, formula_avg_psa, formula_protected_format)
+
+            # Rumus NR: NR = ROUND( (Avg_TP + Avg_LM + 2*Avg_PSA) / bobot_valid , 0)
+            # bobot_valid = (Avg_TP>0) + (Avg_LM>0) + 2*(Avg_PSA>0)
+            if idx_nr is not None and idx_avg_tp is not None and idx_avg_lm is not None and idx_avg_psa is not None:
+                col_avg_tp = col_idx_to_excel(idx_avg_tp + COL_OFFSET)
+                col_avg_lm = col_idx_to_excel(idx_avg_lm + COL_OFFSET)
+                col_avg_psa = col_idx_to_excel(idx_avg_psa + COL_OFFSET)
+                formula_nr = (
+                    f"=IFERROR(ROUND(({col_avg_tp}{excel_row}+{col_avg_lm}{excel_row}+2*{col_avg_psa}{excel_row})/"
+                    f"(({col_avg_tp}{excel_row}>0)+({col_avg_lm}{excel_row}>0)+2*({col_avg_psa}{excel_row}>0)),0),\"\")"
+                )
+                worksheet.write_formula(row_num, idx_nr + COL_OFFSET, formula_nr, formula_protected_format)
 
         # ====================================================================
         # 4. SET LEBAR KOLOM UNTUK DATA SISWA
@@ -351,7 +429,7 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
         worksheet.set_column(0 + COL_OFFSET, 0 + COL_OFFSET, 5)
         # Nama Siswa: Kolom B (indeks 1) -> Lebar 25
         worksheet.set_column(1 + COL_OFFSET, 1 + COL_OFFSET, 25)
-        # Kelas: Kolom C (indeks 2) -> Lebar 5
+        # Kelas: Kolom C (indeks 2) -> Lebar 7
         worksheet.set_column(2 + COL_OFFSET, 2 + COL_OFFSET, 7)
 
         # Kolom Nilai Numerik (D dan seterusnya)
@@ -359,6 +437,14 @@ def generate_excel_form_nilai_siswa(df, mapel, semester, kelas, tp, guru, nip):
 
         # Deskripsi Rapor (Kolom terakhir)
         worksheet.set_column(num_cols - 1 + COL_OFFSET, num_cols - 1 + COL_OFFSET, 60)
+
+        # Freeze panes: freeze header row(s) dan 2 kolom pertama (NIS + Nama)
+        worksheet.freeze_panes(START_ROW_DATA + 1, 2)
+
+        # Opsional: proteksi sheet. Saat diaktifkan, locked cell tidak bisa diedit tanpa password.
+        # Jika ingin mengaktifkan proteksi, hapus komentar baris di bawah dan sesuaikan password jika perlu.
+        # worksheet.protect()  # tanpa password
+        # worksheet.protect('password123')  # dengan password (contoh)
 
     return output.getvalue()
 
@@ -468,6 +554,9 @@ def generate_excel_report_tk(df, mapel, kelas, tp):
         # Set lebar kolom
         worksheet.set_column(1, 1, 25) # Nama Siswa
 
+        # Freeze pane to keep header and first two columns visible
+        worksheet.freeze_panes(START_ROW_DATA + 1, 2)
+
     return output.getvalue()
 
 
@@ -477,10 +566,45 @@ def generate_excel_report_tk(df, mapel, kelas, tp):
 
 st.set_page_config(layout="wide", page_title="Editor Nilai Kurikulum Merdeka (LM x 5)")
 
-# Injeksi CSS untuk gaya
+# Injeksi CSS untuk gaya & freeze header + freeze kolom Nama
 st.markdown(
     """
     <style>
+    /* Buat tabel st.dataframe bisa scroll horz & vert */
+    div[data-testid="stDataFrame"] table {
+        display: block;
+        overflow-x: auto;
+        overflow-y: auto;
+        max-height: 600px;
+        white-space: nowrap;
+    }
+
+    /* Freeze header */
+    div[data-testid="stDataFrame"] thead tr th {
+        position: sticky;
+        top: 0;
+        background-color: #ffffff;
+        z-index: 3;
+    }
+
+    /* Freeze kolom NIS (kolom ke-1) */
+    div[data-testid="stDataFrame"] tbody tr td:nth-child(1),
+    div[data-testid="stDataFrame"] thead tr th:nth-child(1) {
+        position: sticky;
+        left: 0;
+        background-color: #ffffff;
+        z-index: 4;
+    }
+
+    /* Freeze kolom Nama (kolom ke-2) */
+    div[data-testid="stDataFrame"] tbody tr td:nth-child(2),
+    div[data-testid="stDataFrame"] thead tr th:nth-child(2) {
+        position: sticky;
+        left: 80px; /* Streamlit auto width — 80px offset works with default */
+        background-color: #ffffff;
+        z-index: 3;
+    }
+
     /* Hilangkan index di Streamlit Data Editor */
     div[data-testid="stDataFrame"] .st-bd {
         margin-left: -5px;
@@ -672,6 +796,7 @@ if df_base is not None and len(df_base) > 0:
     # Tampilkan data dengan kolom yang sudah difilter
     df_display = df_final_calculated[display_cols].rename(columns={**display_map_tk})
 
+    # Gunakan st.dataframe untuk memanfaatkan CSS freeze yang kita injeksikan di atas
     st.dataframe(df_display,
                  hide_index=True, use_container_width=True)
 
