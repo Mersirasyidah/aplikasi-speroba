@@ -103,6 +103,7 @@ df_all_students_base = load_base_student_data()
 
 def calculate_nr(df_input: pd.DataFrame) -> pd.DataFrame:
     """
+
     Menghitung Nilai Rapor (NR) dan nilai perantara (Avg_TP, Avg_LM, Avg_PSA).
     LOGIKA BARU: NR = (1*Avg_TP + 2*Avg_LM + 1*Avg_PSA) / (Total Bobot Valid)
     """
@@ -161,7 +162,10 @@ def calculate_nr(df_input: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_tk_status(df_input: pd.DataFrame) -> pd.DataFrame:
     """
-    Menentukan Status TP1–TP5 (T/R) termasuk validasi tambahan (Demotion Rule).
+    Menentukan Status TP1–TP5 (T/R) termasuk validasi tambahan:
+    • Jika semua TP ≥ 80 DAN tidak ada yang kosong (0), maka
+      TP dengan nilai TERKECIL akan dijadikan 'R'.
+    • TP bernilai 0 → Status kosong (“”)
     """
     df = df_input.copy()
     # Pastikan kolom TP ada; gunakan urutan TP1..TP5
@@ -178,9 +182,8 @@ def calculate_tk_status(df_input: pd.DataFrame) -> pd.DataFrame:
             else "R"
         )
 
-    # ---- Tahap 2: Validasi: Demotion Rule ----
-    # Jika SEMUA nilai terisi (non-zero) dan semuanya >= threshold,
-    # maka pilih TP dengan nilai terkecil dan ubah statusnya menjadi 'R'
+    # ---- Tahap 2: Validasi: Jika SEMUA nilai terisi (non-zero) dan semuanya >= threshold,
+    #      maka pilih TP dengan nilai terkecil dan ubah statusnya menjadi 'R' ----
     def apply_validation_rule(row):
         # Ambil hanya TP yang terisi (non-zero)
         filled_tps = {tp: row[tp] for tp in tp_cols if pd.notna(row[tp]) and row[tp] > 0}
@@ -259,8 +262,7 @@ def col_idx_to_excel(col_idx):
 def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sheet_name):
     """
     Internal function: Menulis satu sheet Form Nilai Siswa (Laporan Lengkap) ke writer yang sudah ada.
-    Status TP ditulis sebagai RUMUS Excel agar dapat diperbarui secara real-time,
-    termasuk logika Demotion Rule yang kompleks.
+    Status TP ditulis sebagai RUMUS Excel agar dapat diperbarui secara real-time.
     """
     workbook = writer.book
     worksheet = workbook.add_worksheet(sheet_name) # Tambahkan sheet baru
@@ -276,6 +278,7 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
     text_format = workbook.add_format({
         'border': 1, 'align': 'left', 'valign': 'vcenter'
     })
+    # NOTE: hidden_value_format dihilangkan karena D4 tidak lagi digunakan
 
     # Format untuk kolom Status TP (warna kuning lembut) dan locked (NILAI RUMUS)
     status_tp_protected_format = workbook.add_format({
@@ -350,6 +353,8 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
     worksheet.write(3 + START_ROW_INFO, 0, 'KKTP', header_info_format)
     worksheet.write(3 + START_ROW_INFO, 2, f": {KKM}", header_info_format) # Tulis ': 80' di C4
 
+    # NOTE: Baris worksheet.write(3 + START_ROW_INFO, 3, KKM, ...) dan worksheet.set_column(3, 3, 5) dihapus.
+
     # ------------------------------------------------
     # Bagian Kanan (Kolom G & I)
     # ------------------------------------------------
@@ -390,6 +395,7 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
     idx_nr = idx_of('NR')
 
     # NEW: Find Status TP and corresponding TP Score indices
+    # Status TP Header Name -> TP Score Display Name
     status_tp_map = {f'Status TP{i}': f'TP-{i}' for i in range(1, 6)}
 
     # Status TP Index -> TP Score Index
@@ -415,73 +421,30 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
     REVERSE_COLUMN_MAP['NAMA SISWA'] = 'Nama'
     REVERSE_COLUMN_MAP['KELAS'] = 'Kelas'
 
-    # Tentukan range absolut TP Scores untuk Demotion Rule
-    if tp_score_indices:
-        first_tp_col_idx = tp_score_indices[0] + COL_OFFSET
-        last_tp_col_idx = tp_score_indices[-1] + COL_OFFSET
-
-        # Kolom huruf untuk TP1 dan TP5
-        first_tp_col_letter = col_idx_to_excel(first_tp_col_idx)
-        last_tp_col_letter = col_idx_to_excel(last_tp_col_idx)
-    else:
-        first_tp_col_letter, last_tp_col_letter = None, None
 
     for r_i in range(num_rows):
         row_num = START_ROW_DATA + 1 + r_i
         excel_row = row_num + 1
 
-        # Full TP Score Range (absolute, e.g., $D8:$H8)
-        if first_tp_col_letter:
-            full_tp_range = (
-                f"${first_tp_col_letter}{excel_row}:"
-                f"${last_tp_col_letter}{excel_row}"
-            )
-            min_score = f"MIN({full_tp_range})"
-        else:
-            full_tp_range = ""
-            min_score = ""
-
-
         for col_num, column_name in enumerate(HEADER_COLS_ORDER):
 
             # 1. Menulis Status TP (Menggunakan Rumus Excel)
             if column_name.startswith('Status TP'):
-
+                # Nilai KKM 80 langsung dimasukkan ke rumus
                 KKM_VALUE = KKM
+
+                # Dapatkan indeks kolom TP Score yang terkait
                 tp_score_idx = status_tp_indices.get(col_num)
 
-                if tp_score_idx is not None and full_tp_range:
+                if tp_score_idx is not None:
+                    # Dapatkan nama kolom Excel dari TP Score (misal: D8)
+                    col_tp_score = col_idx_to_excel(tp_score_idx + COL_OFFSET)
 
-                    # ------------------- LOGIKA RUMUS DEMOTION RULE ---------------------
-
-                    # Column letter for current TP score (e.g., D for TP-1)
-                    col_tp_score_letter = col_idx_to_excel(tp_score_idx + COL_OFFSET)
-
-                    # Current TP Cell (e.g., D8)
-                    current_tp_cell = f"{col_tp_score_letter}{excel_row}"
-
-                    # Current TP Range for COUNTIF (semi-absolute, e.g., $D8:D8, $D8:E8)
-                    current_countif_range = (
-                        f"${first_tp_col_letter}{excel_row}:"
-                        f"{col_tp_score_letter}{excel_row}"
-                    )
-
-                    # Demotion Check Logic: AND(Score=MIN(Range); COUNTIF($Start:Current; MIN(Range))=1)
-                    # Ini memastikan hanya TP pertama dengan nilai minimum yang diturunkan 'R'
-                    demotion_check = (
-                        f"AND({current_tp_cell}={min_score};"
-                        f"COUNTIF({current_countif_range};{min_score})=1)"
-                    )
-
-                    # Full Formula: IF(Score=0;""; IF(Score<KKM;"R"; IF(DemotionCheck;"R";"T")))
+                    # Rumus: =IF(TP_Score=0,"",IF(TP_Score>=80,"T","R"))
                     formula_tk = (
-                        f'=IF({current_tp_cell}=0;"";'
-                        f'IF({current_tp_cell}<{KKM_VALUE};"R";'
-                        f'IF({demotion_check};"R";"T")))'
+                        f'=IF({col_tp_score}{excel_row}=0,"",'
+                        f'IF({col_tp_score}{excel_row}>={KKM_VALUE},"T","R"))'
                     )
-
-                    # ------------------- AKHIR LOGIKA RUMUS DEMOTION RULE ---------------------
-
                     worksheet.write_formula(row_num, col_num + COL_OFFSET, formula_tk, status_tp_protected_format)
 
                 continue # Lanjut ke kolom berikutnya
@@ -490,7 +453,7 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
             if column_name in ['Rata-rata TP', 'Rata-rata LM', 'Rata-rata PSA', 'NR']:
                 continue
 
-            # 3. Tulis nilai statis/input
+            # 3. Tulis nilai statis/input (NIS, Nama, Kelas, Deskripsi Rapor, TP-1 s/d TP-5, LM-1 s/d LM-5, PTS, SAS/SAT)
 
             # Cari nama kolom data di df_export
             data_column_name = REVERSE_COLUMN_MAP.get(column_name, column_name)
@@ -523,21 +486,15 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
         if idx_avg_tp is not None and tp_score_indices:
             first_tp_col = col_idx_to_excel(tp_score_indices[0] + COL_OFFSET)
             last_tp_col = col_idx_to_excel(tp_score_indices[-1] + COL_OFFSET)
-
-            # **MODIFIKASI: Menambahkan IFERROR untuk menampilkan 0 jika tidak ada nilai > 0**
-            formula_avg_tp = (
-                f"=IFERROR(AVERAGEIF({first_tp_col}{excel_row}:{last_tp_col}{excel_row};\">0\"); 0)"
-            )
+            # Menggunakan AverageIF yang mengabaikan sel kosong/0
+            formula_avg_tp = f"=AVERAGEIF({first_tp_col}{excel_row}:{last_tp_col}{excel_row},\">0\")"
             worksheet.write_formula(row_num, idx_avg_tp + COL_OFFSET, formula_avg_tp, formula_protected_format)
 
         if idx_avg_lm is not None and lm_indices:
             first_lm_col = col_idx_to_excel(lm_indices[0] + COL_OFFSET)
             last_lm_col = col_idx_to_excel(lm_indices[-1] + COL_OFFSET)
-
-            # **MODIFIKASI: Menambahkan IFERROR untuk menampilkan 0 jika tidak ada nilai > 0**
-            formula_avg_lm = (
-                f"=IFERROR(AVERAGEIF({first_lm_col}{excel_row}:{last_lm_col}{excel_row};\">0\"); 0)"
-            )
+            # Menggunakan AverageIF yang mengabaikan sel kosong/0
+            formula_avg_lm = f"=AVERAGEIF({first_lm_col}{excel_row}:{last_lm_col}{excel_row},\">0\")"
             worksheet.write_formula(row_num, idx_avg_lm + COL_OFFSET, formula_avg_lm, formula_protected_format)
 
         # TULIS RUMUS Avg_PSA
@@ -547,12 +504,12 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
             # Rumus untuk rata-rata 2 nilai (PTS dan SAS).
             # Jika total > 0, hitung rata-rata
             formula_avg_psa = (
-                f"=IF({col_pts}{excel_row}+{col_sas}{excel_row}>0; "
-                f"({col_pts}{excel_row}+{col_sas}{excel_row})/2; 0)"
+                f"=IF({col_pts}{excel_row}+{col_sas}{excel_row}>0, "
+                f"({col_pts}{excel_row}+{col_sas}{excel_row})/2, 0)"
             )
             worksheet.write_formula(row_num, idx_avg_psa + COL_OFFSET, formula_avg_psa, formula_protected_format)
 
-        # Rumus NR (Pembobotan 1:2:1)
+        # Rumus NR (Tidak berubah dari permintaan sebelumnya)
         if idx_nr is not None and idx_avg_tp is not None and idx_avg_lm is not None and idx_avg_psa is not None:
             col_avg_tp = col_idx_to_excel(idx_avg_tp + COL_OFFSET)
             col_avg_lm = col_idx_to_excel(idx_avg_lm + COL_OFFSET)
@@ -566,13 +523,13 @@ def write_form_nilai_sheet(df, mapel, semester, kelas, tp, guru, nip, writer, sh
             # Bagian utama perhitungan BARU: (Avg_TP + 2*Avg_LM + 1*Avg_PSA) / bobot_valid
             calculation_core = (
                 f"({col_avg_tp}{excel_row}+2*{col_avg_lm}{excel_row}+{col_avg_psa}{excel_row})/"
-                f"IF({calculation_denominator}=0;1;{calculation_denominator})" # Mencegah Div/0
+                f"IF({calculation_denominator}=0,1,{calculation_denominator})" # Mencegah Div/0
             )
 
-            # Rumus: =IF(Avg_PSA_Cell > 0; IFERROR(ROUND(core; 0); 0); 0)
+            # Rumus: =IF(Avg_PSA_Cell > 0, IFERROR(ROUND(core, 0), 0), 0)
             formula_nr = (
-                f"=IF({col_avg_psa}{excel_row}>0; "
-                f"IFERROR(ROUND({calculation_core};0);0);0)"
+                f"=IF({col_avg_psa}{excel_row}>0, "
+                f"IFERROR(ROUND({calculation_core},0),0),0)"
             )
             worksheet.write_formula(row_num, idx_nr + COL_OFFSET, formula_nr, formula_protected_format)
 
@@ -682,7 +639,7 @@ def write_report_tk_sheet(df, mapel, kelas, tp, writer, sheet_name):
                 worksheet.write(row_num, col_num, cell_value, border_format)
 
     # Set lebar kolom
-    worksheet.set_column(1, 1, 35) # Nama Siswa
+    worksheet.set_column(1, 1, 25) # Nama Siswa
     worksheet.set_column(0, num_cols-1, 8) # Lebar default 8
     # Freeze pane to keep header and first two columns visible
     worksheet.freeze_panes(START_ROW_DATA + 1, 2)
@@ -921,7 +878,7 @@ else:
             nip_guru_input
         )
         st.download_button(
-            label="⬇️ Download Orek Orek Nilai Rapor** (Pilih Banyak Kelas)",
+            label="⬇️ Ekspor **Form Nilai** (Multi-Sheet per Kelas)",
             file_name=f"Form_Nilai_Rapor_Multi_{mapel_terpilih}_{semester_input}.xlsx",
             data=excel_buffer_nilai,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -936,8 +893,8 @@ else:
             tahun_pelajaran_input
         )
         st.download_button(
-            label="⬇️ Unduh **Hasil Olah Nilai Rapor dan TP** (Pilih Banyak Kelas)",
-            file_name=f"Laporan_TP_Multi_{mapel_terpilih}_{semester_input}.xlsx",
+            label="⬇️ Unduh **Laporan TK** (Multi-Sheet per Kelas)",
+            file_name=f"Laporan_TK_Multi_{mapel_terpilih}_{semester_input}.xlsx",
             data=excel_buffer_tk,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_tk"
