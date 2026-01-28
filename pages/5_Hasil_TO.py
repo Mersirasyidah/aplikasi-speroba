@@ -54,7 +54,7 @@ sel_tahun = st.selectbox("Pilih Tahun Pelajaran", tahun_opsi, index=0)
 tgl_kegiatan_opsi = [
     "Tanggal 20 - 23 Oktober 2025",
     "Tanggal 3 - 6 November 2025",
-    "Tanggal 12 - 15 Januari 2026",
+    "Tanggal 19 - 22 Januari 2026",
     "Tanggal 26 - 29 Januari 2026",
     "Tanggal 2 - 5 Februari 2026"
 ]
