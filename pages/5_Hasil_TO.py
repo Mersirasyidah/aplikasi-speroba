@@ -48,7 +48,7 @@ if not uploaded: st.stop()
 df = pd.read_excel(uploaded).fillna(np.nan)
 df.columns = df.columns.str.strip()
 
-# Perhitungan Ranking Per Sesi
+# Perhitungan Ranking Otomatis Per Sesi
 for i in range(1, 6):
     cols_sesi = [f"{m}_TKAD{i}" for m in mapel_tetap]
     available = [c for c in cols_sesi if c in df.columns]
@@ -70,9 +70,7 @@ sel_siswa = st.selectbox("Pilih Siswa", ["-- Semua Siswa --"] + siswa_list)
 # ===============================================
 def format_val(val):
     if pd.isna(val) or val == "": return ""
-    try:
-        num = float(val)
-        return f"{num:.2f}" if num % 1 != 0 else str(int(num))
+    try: return f"{float(val):.2f}"
     except: return str(val)
 
 def draw_student_page(c, row):
@@ -81,10 +79,11 @@ def draw_student_page(c, row):
     cw = width - ml - mr
     y = height - mt
 
-    # --- 1. KOP SURAT ---
+    # --- 1. LOGO & KOP SURAT ---
+    # Logo Kiri
     logo_path = "assets/logo_kiri.png"
     if os.path.exists(logo_path):
-        c.drawImage(logo_path, ml - 10*mm, y - 18*mm, width=28*mm, height=28*mm, preserveAspectRatio=True, mask='auto')
+        c.drawImage(logo_path, ml - 10*mm, y - 15*mm, width=25*mm, height=25*mm, preserveAspectRatio=True, mask='auto')
     
     c.setFont("Helvetica-Bold", 12)
     c.drawCentredString(width/2, y, "PEMERINTAH KABUPATEN BANTUL")
@@ -93,13 +92,13 @@ def draw_student_page(c, row):
     y -= 5*mm
     c.setFont("Helvetica-Bold", 14)
     c.drawCentredString(width/2, y, "SMP NEGERI 2 BANGUNTAPAN")
-    y -= 1*mm
+    y -= 2*mm
 
-    # Aksara Jawa (DIPERBESAR Sesuai Permintaan)
+    # Aksara Jawa
     aksara_path = "assets/aksara_jawa.jpg"
     if os.path.exists(aksara_path):
-        c.drawImage(aksara_path, (width-125*mm)/2, y - 13*mm, width=125*mm, height=12*mm, preserveAspectRatio=True, mask='auto')
-        y -= 14*mm
+        c.drawImage(aksara_path, (width-100*mm)/2, y - 10*mm, width=100*mm, height=8*mm, preserveAspectRatio=True, mask='auto')
+        y -= 12*mm
     else:
         y -= 4*mm
 
@@ -108,29 +107,30 @@ def draw_student_page(c, row):
     y -= 5*mm
     c.setFont("Helvetica", 10); c.setFillColor(blue)
     c.drawCentredString(width/2, y, "Website : www.smpn2banguntapan.sch.id Email : smp2banguntapan@yahoo.com")
-    c.setFillColor(black); y -= 2*mm
+    c.setFillColor(black); y -= 3*mm
     
-    c.setLineWidth(1.2); c.line(ml, y, width-mr, y)
-    y -= 7*mm # Jarak spasi diperkecil
+    # Garis Kop
+    c.setLineWidth(1); c.line(ml, y, width-mr, y)
+    y -= 10*mm
 
     # --- 2. JUDUL ---
-    c.setFont("Helvetica-Bold", 11)
+    c.setFont("Helvetica-Bold", 12)
     c.drawCentredString(width/2, y, "LAPORAN HASIL PERSIAPAN DAN PEMANTAPAN")
-    y -= 5*mm
+    y -= 6*mm
     c.drawCentredString(width/2, y, sel_asesmen.upper())
-    y -= 5*mm
+    y -= 6*mm
     c.drawCentredString(width/2, y, f"TAHUN PELAJARAN {sel_tahun}")
-    y -= 5*mm
+    y -= 6*mm
     c.drawCentredString(width/2, y, sel_tgl_kegiatan)
-    y -= 8*mm # Jarak spasi diperkecil
+    y -= 12*mm
 
     # --- 3. IDENTITAS ---
-    c.setFont("Helvetica-Bold", 10)
+    c.setFont("Helvetica-Bold", 11)
     for lbl, k in [("Nama", "Nama Siswa"), ("NIS", "NIS"), ("Kelas", "Kelas")]:
         c.drawString(ml+10*mm, y, lbl)
         c.drawString(ml+35*mm, y, f": {row.get(k, '')}")
-        y -= 5*mm # Jarak spasi diperkecil
-    y -= 3*mm # Jarak ke tabel diperkecil
+        y -= 6*mm
+    y -= 5*mm
 
     # --- 4. TABEL ---
     row_h, col_no, col_m, col_s = 7*mm, 12*mm, 65*mm, 17*mm
@@ -140,6 +140,7 @@ def draw_student_page(c, row):
     # Background Header
     c.setFillColor(lightgrey); c.rect(xs, y-2*row_h, tw, 2*row_h, fill=1); c.setFillColor(black)
     
+    # Teks Header
     c.setFont("Helvetica-Bold", 10)
     c.drawCentredString(xs+col_no/2, y-row_h-2*mm, "No")
     c.drawCentredString(xs+col_no+col_m/2, y-row_h-2*mm, "Mata Pelajaran")
@@ -147,7 +148,7 @@ def draw_student_page(c, row):
     for i in range(5):
         c.drawCentredString(xs+col_no+col_m+(i*col_s)+col_s/2, y-1.5*row_h-2*mm, str(i+1))
 
-    # Data
+    # Baris Data Nilai
     y_row = y - 2*row_h
     c.setFont("Helvetica", 10)
     sums = [[] for _ in range(5)]
@@ -160,7 +161,7 @@ def draw_student_page(c, row):
             if not pd.isna(val): sums[j].append(float(val))
         y_row -= row_h
 
-    # Footer
+    # Baris Footer (Jumlah, Rata2, Peringkat)
     c.setFont("Helvetica-Bold", 10)
     footers = [
         ("Jumlah", [sum(x) if x else np.nan for x in sums]),
@@ -173,55 +174,58 @@ def draw_student_page(c, row):
             c.drawCentredString(xs+col_no+col_m+(j*col_s)+col_s/2, y_row-row_h/2-2*mm, format_val(v))
         y_row -= row_h
 
-    # --- GRID TABEL (Perbaikan Garis Tengah Header) ---
+    # --- GRID TABEL (Perbaikan Garis) ---
     c.setLineWidth(0.5)
-    num_grid_rows = len(mapel_urut) + 2 + 3
-    for i in range(num_grid_rows + 1):
+    num_data_rows = len(mapel_urut) + 2 + 3 # +2 header, +3 footer
+    for i in range(num_data_rows + 1):
+        # GARIS TENGAH HEADER: Kita tidak lagi skip i == 1 untuk kolom nilai saja
         if i == 1:
-            # GARIS TENGAH HEADER MUNCUL KEMBALI
+            # Menggambar garis tengah hanya di bagian 5 kolom nilai
             c.line(xs+col_no+col_m, y-row_h, xs+tw, y-row_h)
         else:
             c.line(xs, y - i*row_h, xs + tw, y - i*row_h)
     
-    c.line(xs, y, xs, y_row) # Vertikal Kiri
-    c.line(xs+col_no, y, xs+col_no, y_row) # Vertikal No
-    c.line(xs+col_no+col_m, y, xs+col_no+col_m, y_row) # Vertikal Mapel
+    # Garis Vertikal
+    c.line(xs, y, xs, y_row) # Kiri
+    c.line(xs+col_no, y, xs+col_no, y_row) # No
+    c.line(xs+col_no+col_m, y, xs+col_no+col_m, y_row) # Mapel
     for i in range(1, 6):
         c.line(xs+col_no+col_m+i*col_s, y-row_h, xs+col_no+col_m+i*col_s, y_row)
-    c.line(xs+tw, y, xs+tw, y_row) # Vertikal Kanan
+    c.line(xs+tw, y, xs+tw, y_row) # Kanan
 
     # --- 5. KETERANGAN ---
-    y_ket = y_row - 6*mm
+    y_ket = y_row - 8*mm
     c.setFont("Helvetica-Bold", 9); c.drawString(ml, y_ket, "Keterangan:")
-    c.setFont("Helvetica", 8)
+    c.setFont("Helvetica", 9)
     for i, item in enumerate(asesmen_opsi, 1):
-        y_ket -= 3.5*mm
+        y_ket -= 4*mm
         tgl_item = tgl_kegiatan_opsi[i-1] if i-1 < len(tgl_kegiatan_opsi) else "-"
         c.drawString(ml+5*mm, y_ket, f"{i}. {item} ({tgl_item})")
 
-    # --- 6. TANDA TANGAN & NIP ---
-    y_sign = y_ket - 5*mm
+    # --- 6. TANDA TANGAN ---
+    # Posisi y_sign harus dihitung dari bawah atau setelah keterangan agar tidak bertumpuk
+    y_sign = y_ket - 10*mm
     tgl_str = f"{sel_tgl_ttd.day} {bulan_id[sel_tgl_ttd.strftime('%B')]} {sel_tgl_ttd.year}"
     x_ttd = width - mr - 65*mm
     
-    c.setFont("Helvetica", 10)
+    c.setFont("Helvetica", 11)
     c.drawString(x_ttd, y_sign, f"Banguntapan, {tgl_str}")
-    y_sign -= 4*mm
+    y_sign -= 5*mm
     c.drawString(x_ttd, y_sign, "Mengetahui,")
-    y_sign -= 4*mm
+    y_sign -= 5*mm
     c.drawString(x_ttd, y_sign, "Kepala Sekolah,")
     
     # Gambar Tanda Tangan
     ttd_path = "assets/ttd_kepsek.jpeg"
     if os.path.exists(ttd_path):
-        c.drawImage(ttd_path, x_ttd, y_sign - 16*mm, width=35*mm, height=14*mm, mask='auto')
+        c.drawImage(ttd_path, x_ttd, y_sign - 18*mm, width=35*mm, height=15*mm, mask='auto')
     
     # Nama & NIP
-    y_name = y_sign - 22*mm
-    c.setFont("Helvetica-Bold", 10)
+    y_name = y_sign - 25*mm
+    c.setFont("Helvetica-Bold", 11)
     c.drawString(x_ttd, y_name, "Alina Fiftiyani Nurjannah, M.Pd.")
-    y_name -= 4*mm
-    c.setFont("Helvetica", 10)
+    y_name -= 5*mm
+    c.setFont("Helvetica", 11)
     c.drawString(x_ttd, y_name, "NIP 198001052009032006")
 
 def make_pdf(data_rows):
@@ -238,6 +242,6 @@ col1, col2 = st.columns(2)
 with col1:
     if sel_siswa != "-- Semua Siswa --":
         row_sel = df_kelas[df_kelas["Nama Siswa"] == sel_siswa]
-        st.download_button("📄 PDF Per Siswa", make_pdf(row_sel), f"Laporan_{sel_siswa}.pdf")
+        st.download_button("📄 PDF Siswa", make_pdf(row_sel), f"Laporan_{sel_siswa}.pdf")
 with col2:
     st.download_button("📄 PDF Satu Kelas", make_pdf(df_kelas), f"Laporan_Kelas_{sel_kelas}.pdf")
