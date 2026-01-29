@@ -176,7 +176,7 @@ def draw_student_page(c, row, sel_asesmen, sel_tahun, sel_tgl_kegiatan, mapel_ur
     width, height = A4
 
     aksara_path = "assets/aksara_jawa.jpg"
-    logo_path = "assets/logo.jpeg"
+    logo_path = "assets/logo_kiri.png"
 
     # === PENGATURAN MARGIN ===
     margin_left   = 30 * mm
