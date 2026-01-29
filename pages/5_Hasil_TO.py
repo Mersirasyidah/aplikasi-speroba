@@ -39,8 +39,8 @@ asesmen_opsi = [
     "TKA/TKAD Dikpora Kab Bantul 1",
     "TKA/TKAD MKKS SMP Kab Bantul 1",
     "TKA/TKAD MKKS SMP Kab Bantul 2",
-    "TKA/TKAD Dikpora Kab Bantul 2",
-    "TKA/TKAD Forum MKKS SMP D.I.Yogyakarta"
+    "TKA/TKAD Forum MKKS SMP D.I.Yogyakarta",
+    "TKA/TKAD Dikpora Kab Bantul 2"
 ]
 sel_asesmen = st.selectbox("Pilih Jenis Asesmen", asesmen_opsi)
 tahun_opsi = [f"{th}/{th+1}" for th in range(2025, 2036)]
@@ -55,8 +55,8 @@ tgl_kegiatan_opsi = [
     "Tanggal 20 - 23 Oktober 2025",
     "Tanggal 3 - 6 November 2025",
     "Tanggal 19 - 22 Januari 2026",
-    "Tanggal 26 - 29 Januari 2026",
-    "Tanggal 2 - 5 Februari 2026"
+    "Tanggal 2 - 5 Februari 2026",
+    "Tanggal 9 - 12 Maret 2026"
 ]
 
 # Tambahkan Pilihan Tanggal Kegiatan ke Streamlit
