@@ -165,7 +165,7 @@ def draw_student_page(c, row):
     footers = [
         ("Jumlah", [sum(x) if x else np.nan for x in sums]),
         ("Rata-rata", [sum(x)/len(x) if x else np.nan for x in sums]),
-        ("Peringkat", [row.get(f"Peringkat_TKAD{j+1}", np.nan) for j in range(5)])
+        ("Peringkat Kelas ke -", [row.get(f"Peringkat_TKAD{j+1}", np.nan) for j in range(5)])
     ]
     for lbl, data in footers:
         c.drawString(xs+col_no+2*mm, y_row-row_h/2-2*mm, lbl)
